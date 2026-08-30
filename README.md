@@ -345,6 +345,3 @@ over a real socket where the difference is honestly nothing. Re-run it with:
   change, refresh with `./gradlew test -Pupdate-golden` and review the diff.
 - Every "this is a compile error" promise has a test in
   `larkbatis-processor/src/test/java/.../CompileFailTest.java`.
-
-Design document: see `../docs/larkbatis-design.md` in the parent workspace;
-build plan: `../docs/larkbatis-build-plan.md`.
