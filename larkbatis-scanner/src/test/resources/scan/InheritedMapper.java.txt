@@ -1,0 +1,21 @@
+package com.example.legacy;
+
+import java.util.List;
+import org.apache.ibatis.annotations.Select;
+
+public interface InheritedMapper extends BaseMapper {
+
+    @Select("SELECT id, name FROM users WHERE id = #{id}")
+    LegacyUser find(long id);
+
+    @Select("SELECT id, name FROM users WHERE name = #{name}")
+    LegacyUser find(String name);
+
+    @Select("SELECT id FROM users WHERE city = #{q.address.city}")
+    List<LegacyUser> byCity(Query q);
+
+    /** SQL assembled in Java: what looks like a deep path is a .append( chain. */
+    default String sqlFor(int i) {
+        return "SELECT id FROM users WHERE id = #{list[" + i + "].id}";
+    }
+}

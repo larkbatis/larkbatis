@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.lbsample.TeamMapper">
+
+    <resultMap id="teamWithMembers" type="com.example.lbsample.Team">
+        <id property="id" column="t_id"/>
+        <result property="name" column="t_name"/>
+        <collection property="members" ofType="com.example.lbsample.Member">
+            <id property="id" column="m_id"/>
+            <result property="name" column="m_name"/>
+            <result property="jersey" column="m_jersey"/>
+        </collection>
+    </resultMap>
+
+    <resultMap id="teamWithCoach" type="com.example.lbsample.Team">
+        <id property="id" column="t_id"/>
+        <result property="name" column="t_name"/>
+        <association property="coach" javaType="com.example.lbsample.Coach">
+            <id property="id" column="c_id"/>
+            <result property="name" column="c_name"/>
+        </association>
+    </resultMap>
+
+    <resultMap id="teamFlat" type="com.example.lbsample.Team">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+    </resultMap>
+
+    <sql id="teamMemberJoin">
+        SELECT t.id AS t_id, t.name AS t_name,
+               m.id AS m_id, m.name AS m_name, m.jersey AS m_jersey
+        FROM team t
+        LEFT JOIN member m ON m.team_id = t.id
+    </sql>
+
+    <select id="findWithMembers" resultMap="teamWithMembers">
+        <include refid="teamMemberJoin"/>
+        WHERE t.id = #{id}
+        ORDER BY t.id, m.jersey
+    </select>
+
+    <select id="findAllWithMembers" resultMap="teamWithMembers">
+        <include refid="teamMemberJoin"/>
+        ORDER BY t.id, m.jersey
+    </select>
+
+    <select id="findAllWithCoach" resultMap="teamWithCoach">
+        SELECT t.id AS t_id, t.name AS t_name, c.id AS c_id, c.name AS c_name
+        FROM team t
+        LEFT JOIN coach c ON c.id = t.coach_id
+        ORDER BY t.id
+    </select>
+
+    <!-- the trailing expression has no alias, so the select list does not
+         parse and every column is resolved by name instead -->
+    <select id="findAllWithMembersByName" resultMap="teamWithMembers">
+        SELECT t.id AS t_id, t.name AS t_name,
+               m.id AS m_id, m.name AS m_name, m.jersey AS m_jersey,
+               1 + 1
+        FROM team t
+        LEFT JOIN member m ON m.team_id = t.id
+        ORDER BY t.id, m.jersey
+    </select>
+
+    <select id="findAllFlat" resultMap="teamFlat">
+        SELECT * FROM team ORDER BY id
+    </select>
+</mapper>

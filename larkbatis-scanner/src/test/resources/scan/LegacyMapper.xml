@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.LegacyMapper">
+
+  <cache/>
+
+  <select id="clean" resultType="com.example.User">
+    SELECT id, name FROM users WHERE id = #{id}
+  </select>
+
+  <select id="ordered" resultType="com.example.User">
+    SELECT id, name FROM users ORDER BY ${sort}
+  </select>
+
+  <select id="truthy" resultType="com.example.User">
+    SELECT id, name FROM users
+    <where>
+      <if test="name">AND name = #{name}</if>
+      <if test="status.equals('X') or foo[0] &gt; 1">AND status = #{status}</if>
+    </where>
+  </select>
+
+  <select id="spliced" resultType="com.example.User">
+    SELECT ${columns} FROM users
+  </select>
+
+  <resultMap id="userWithOrders" type="com.example.User">
+    <id property="id" column="id"/>
+    <collection property="orders" ofType="com.example.Order" fetchType="lazy">
+      <id property="id" column="order_id"/>
+    </collection>
+  </resultMap>
+
+  <update id="byMap" parameterType="java.util.Map">
+    UPDATE users SET name = #{name} WHERE id = #{id}
+  </update>
+
+  <!-- a commented-out ${splice} must not be counted -->
+
+</mapper>

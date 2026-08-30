@@ -1,0 +1,14 @@
+mapper com.example.app.InvoiceMapper
+  SELECT findAllWithLines -> MANY result:com.example.app.Invoice reader:POSITIONAL_CUSTOM[1, 2, 3]
+    text  |SELECT i.id AS inv_id, i.number AS inv_number, i.issued AS inv_issued, l.id AS line_id, l.sku AS line_sku, l.amount AS line_amount FROM invoice i LEFT JOIN invoice_line l ON l.invoice_id = i.id ORDER BY i.id|
+    collection lines : com.example.app.InvoiceLine reader:POSITIONAL_CUSTOM[4, 5, 6] parentKey 0:PRIM_LONG childKey 0
+  SELECT findWithLines -> ONE result:com.example.app.Invoice reader:POSITIONAL_CUSTOM[1, 2, 3]
+    text  |SELECT i.id AS inv_id, i.number AS inv_number, i.issued AS inv_issued, l.id AS line_id, l.sku AS line_sku, l.amount AS line_amount FROM invoice i LEFT JOIN invoice_line l ON l.invoice_id = i.id WHERE i.id = |
+    bind  id = id : PRIM_LONG
+    text  | ORDER BY i.id|
+    collection lines : com.example.app.InvoiceLine reader:POSITIONAL_CUSTOM[4, 5, 6] parentKey 0:PRIM_LONG childKey 0
+  SELECT findAllWithCustomer -> MANY result:com.example.app.Invoice reader:POSITIONAL_CUSTOM[1, 2, 0]
+    text  |SELECT i.id AS inv_id, i.number AS inv_number, c.id AS cust_id, c.name AS cust_name FROM invoice i LEFT JOIN customer c ON c.id = i.customer_id ORDER BY i.id|
+    association customer : com.example.app.Customer reader:POSITIONAL_CUSTOM[3, 4] parentKey 0:PRIM_LONG childKey 0
+  SELECT findAllFlat -> MANY result:com.example.app.Invoice reader:NAME_BASED_MAPPED[inv_id, inv_number, inv_issued]
+    text  |SELECT * FROM invoice_view ORDER BY inv_id|

@@ -1,0 +1,82 @@
+# Target path: .github/workflows/ci.yml
+#
+# Build and test every push and pull request, then publish a snapshot from main.
+#
+# The snapshot job is separate rather than a step of `build` so that a pull
+# request — which must never see the publishing credentials — cannot reach it at
+# all, and so a snapshot upload failing does not mark the build red.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The Gradle toolchain pins the compiler to 17; this is the JDK that runs
+      # Gradle itself, and matching it keeps the toolchain from downloading one.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Build
+        run: ./gradlew build
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: "**/build/reports/tests/**"
+          retention-days: 7
+
+  snapshot:
+    name: Publish snapshot
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      # No signature: the Portal's snapshot repository neither requires nor
+      # validates one. Only the release bundle does, and release.yml signs.
+      - name: Publish to the Central Portal snapshot repository
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version=//p' gradle.properties)
+          case "$version" in
+            *-SNAPSHOT) ;;
+            *)
+              echo "::notice::version is '$version', not a snapshot — nothing to publish"
+              exit 0
+              ;;
+          esac
+          ./gradlew publishAllPublicationsToCentralSnapshotsRepository

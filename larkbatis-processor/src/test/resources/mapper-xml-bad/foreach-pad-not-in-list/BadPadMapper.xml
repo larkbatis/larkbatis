@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.app.BadPadMapper">
+
+  <!-- unnest(ARRAY[...]) counts its elements, so a repeated last one is a
+       whole extra row — padding is only invisible on the right of an IN -->
+  <select id="insertAll" resultType="com.example.app.User">
+    SELECT id, name, email, created_at FROM unnest(ARRAY[
+    <foreach collection="list" item="u" separator=",">#{u.name}</foreach>
+    ])
+  </select>
+
+</mapper>

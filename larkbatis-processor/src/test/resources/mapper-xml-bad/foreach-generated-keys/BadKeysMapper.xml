@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.app.BadKeysMapper">
+
+  <!-- keys come back one per row; assigning them means walking the collection
+       again, which is what the batch form already does -->
+  <insert id="insertAll" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+    INSERT INTO users (name, email) VALUES
+    <foreach collection="list" item="u" separator=",">(#{u.name}, #{u.email})</foreach>
+  </insert>
+
+</mapper>

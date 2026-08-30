@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.app.LedgerMapper">
+
+    <!-- the shape a migrated mapper already has: the handler named on the
+         mapping, not on the bean -->
+    <resultMap id="entry" type="com.example.app.Entry">
+        <id property="id" column="id"/>
+        <result property="amount" column="amount"
+                typeHandler="com.example.app.MoneyHandler"/>
+        <result property="note" column="note" typeHandler="com.example.app.UpperHandler"/>
+    </resultMap>
+
+    <select id="find" resultMap="entry">
+        SELECT id, amount, note FROM ledger WHERE id = #{id}
+    </select>
+
+    <insert id="insert">
+        INSERT INTO ledger (id, amount, note)
+        VALUES (#{id}, #{amount, typeHandler=com.example.app.MoneyHandler}, #{note})
+    </insert>
+</mapper>

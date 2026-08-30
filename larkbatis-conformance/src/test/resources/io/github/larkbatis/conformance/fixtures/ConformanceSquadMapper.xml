@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.larkbatis.conformance.fixtures.ConformanceSquadMapper">
+
+    <resultMap id="squadWithPlayers" type="io.github.larkbatis.conformance.fixtures.Squad">
+        <id property="id" column="s_id"/>
+        <result property="name" column="s_name"/>
+        <collection property="players" ofType="io.github.larkbatis.conformance.fixtures.Player">
+            <id property="id" column="p_id"/>
+            <result property="name" column="p_name"/>
+            <result property="shirt" column="p_shirt"/>
+        </collection>
+    </resultMap>
+
+    <resultMap id="squadWithCaptain" type="io.github.larkbatis.conformance.fixtures.Squad">
+        <id property="id" column="s_id"/>
+        <result property="name" column="s_name"/>
+        <association property="captain" javaType="io.github.larkbatis.conformance.fixtures.Captain">
+            <id property="id" column="c_id"/>
+            <result property="name" column="c_name"/>
+        </association>
+    </resultMap>
+
+    <select id="allWithPlayers" resultMap="squadWithPlayers">
+        SELECT s.id AS s_id, s.name AS s_name,
+               p.id AS p_id, p.name AS p_name, p.shirt AS p_shirt
+        FROM squad s LEFT JOIN player p ON p.squad_id = s.id
+        ORDER BY s.id, p.shirt
+    </select>
+
+    <select id="allWithCaptain" resultMap="squadWithCaptain">
+        SELECT s.id AS s_id, s.name AS s_name, c.id AS c_id, c.name AS c_name
+        FROM squad s LEFT JOIN captain c ON c.id = s.captain_id
+        ORDER BY s.id
+    </select>
+
+    <select id="oneWithPlayers" resultMap="squadWithPlayers">
+        SELECT s.id AS s_id, s.name AS s_name,
+               p.id AS p_id, p.name AS p_name, p.shirt AS p_shirt
+        FROM squad s LEFT JOIN player p ON p.squad_id = s.id
+        WHERE s.id = #{id}
+        ORDER BY s.id, p.shirt
+    </select>
+</mapper>

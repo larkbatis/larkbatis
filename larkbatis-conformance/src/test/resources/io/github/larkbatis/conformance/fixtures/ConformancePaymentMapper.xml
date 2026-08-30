@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="io.github.larkbatis.conformance.fixtures.ConformancePaymentMapper">
+
+    <resultMap id="payment" type="io.github.larkbatis.conformance.fixtures.Payment">
+        <id property="id" column="id"/>
+        <result property="amount" column="amount"
+                typeHandler="io.github.larkbatis.conformance.fixtures.AmountHandler"/>
+        <result property="memo" column="memo"/>
+    </resultMap>
+
+    <select id="all" resultMap="payment">
+        SELECT id, amount, memo FROM payment ORDER BY id
+    </select>
+
+    <select id="find" resultMap="payment">
+        SELECT id, amount, memo FROM payment WHERE id = #{id}
+    </select>
+</mapper>

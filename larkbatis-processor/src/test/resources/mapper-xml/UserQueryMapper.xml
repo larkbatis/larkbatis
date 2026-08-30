@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.app.UserQueryMapper">
+
+  <sql id="cols">id, name, email, created_at</sql>
+
+  <!-- the landmark: two <if> inside a <where> -->
+  <select id="search" resultType="com.example.app.User">
+    SELECT <include refid="cols"/> FROM users
+    <where>
+      <if test="name != null">AND name LIKE #{name}</if>
+      <if test="minAge != null">AND age &gt;= #{minAge}</if>
+    </where>
+    ORDER BY id
+  </select>
+
+  <select id="byStatus" resultType="com.example.app.User">
+    SELECT <include refid="cols"/> FROM users
+    WHERE 1 = 1
+    <choose>
+      <when test="status != null">AND status = #{status}</when>
+      <otherwise>AND status = 'NEW'</otherwise>
+    </choose>
+    ORDER BY id
+  </select>
+
+  <update id="rename">
+    UPDATE users
+    <set>
+      <if test="name != null">name = #{name},</if>
+      <if test="email != null">email = #{email},</if>
+    </set>
+    WHERE id = #{id}
+  </update>
+
+  <!-- no dynamic tags: folds to a static statement (RawSqlSource precedent) -->
+  <select id="all" resultType="com.example.app.User">
+    SELECT <include refid="cols"/> FROM users ORDER BY id
+  </select>
+
+  <!-- <foreach> -->
+  <select id="findByIds" resultType="com.example.app.User">
+    SELECT <include refid="cols"/> FROM users WHERE id IN
+    <foreach collection="list" item="id" open="(" separator="," close=")">#{id}</foreach>
+    ORDER BY id
+  </select>
+
+  <select id="findByIdsPadded" resultType="com.example.app.User">
+    SELECT <include refid="cols"/> FROM users WHERE id IN
+    <foreach collection="list" item="id" open="(" separator="," close=")">#{id}</foreach>
+  </select>
+
+  <select id="searchInIds" resultType="com.example.app.User">
+    SELECT <include refid="cols"/> FROM users
+    <where>
+      <if test="name != null">AND name LIKE #{name}</if>
+      <if test="ids != null">
+        AND id IN
+        <foreach collection="ids" item="id" index="position" open="(" separator="," close=")">#{id}</foreach>
+      </if>
+    </where>
+    ORDER BY id
+  </select>
+
+</mapper>

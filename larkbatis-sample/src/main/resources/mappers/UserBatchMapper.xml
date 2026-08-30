@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.lbsample.UserBatchMapper">
+
+  <select id="findByIds" resultType="com.example.lbsample.User">
+    SELECT id, name, email, created_at FROM users WHERE id IN
+    <foreach collection="ids" item="id" nullable="false" open="(" separator="," close=")">#{id}</foreach>
+    ORDER BY id
+  </select>
+
+  <select id="findByIdsPadded" resultType="com.example.lbsample.User">
+    SELECT id, name, email, created_at FROM users WHERE id IN
+    <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    ORDER BY id
+  </select>
+
+  <select id="findByNames" resultType="com.example.lbsample.User">
+    SELECT id, name, email, created_at FROM users WHERE name IN
+    <foreach collection="names" item="name" open="(" separator="," close=")">#{name}</foreach>
+    ORDER BY id
+  </select>
+
+  <select id="findByIdsOrdered" resultType="com.example.lbsample.User">
+    SELECT id, name, email, created_at FROM users WHERE id IN
+    <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    ORDER BY CASE id
+    <foreach collection="ids" item="orderedId" index="position">
+      WHEN #{orderedId} THEN #{position}
+    </foreach>
+    END
+  </select>
+
+  <select id="findByColumnValues" resultType="com.example.lbsample.User">
+    SELECT id, name, email, created_at FROM users WHERE
+    <foreach collection="filters" item="value" index="column" separator=" OR ">
+      (name = #{column} AND email = #{value})
+    </foreach>
+    ORDER BY id
+  </select>
+
+  <insert id="insertAll">
+    INSERT INTO users (name, email, created_at) VALUES
+    <foreach collection="users" item="u" separator=",">
+      (#{u.name}, #{u.email}, #{u.createdAt})
+    </foreach>
+  </insert>
+
+  <delete id="deleteByIds">
+    DELETE FROM users WHERE name &lt;&gt; #{keepName} AND id IN
+    <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+  </delete>
+
+  <select id="countByColumns" resultType="com.example.lbsample.User">
+    SELECT id, name, email, created_at FROM users WHERE
+    <foreach collection="columns" item="col" separator=" AND ">${col} IS NOT NULL</foreach>
+    ORDER BY id
+  </select>
+
+  <select id="siblingIndexNames" resultType="com.example.lbsample.User">
+    SELECT id, name, email, created_at FROM users WHERE id IN
+    <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    ORDER BY
+    CASE id
+    <foreach collection="ids" item="oid" index="position">WHEN #{oid} THEN #{position}</foreach>
+    END,
+    CASE name
+    <foreach collection="names" item="nm" index="position">WHEN #{nm} THEN #{position}</foreach>
+    END
+  </select>
+
+  <select id="findByEmails" resultType="com.example.lbsample.User">
+    SELECT id, name, email, created_at FROM users WHERE email IN
+    <foreach collection="probes" item="p" open="(" separator="," close=")">#{p.email}</foreach>
+    ORDER BY id
+  </select>
+
+  <select id="findByIdGroups" resultType="com.example.lbsample.User">
+    SELECT id, name, email, created_at FROM users WHERE
+    <foreach collection="groups" item="group" separator=" OR ">
+      id IN
+      <foreach collection="group" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </foreach>
+    ORDER BY id
+  </select>
+
+</mapper>

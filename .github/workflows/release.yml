@@ -1,0 +1,204 @@
+# Target path: .github/workflows/release.yml
+#
+# Tag `v0.1.0` (or run this by hand) and it ends with four artifacts on Maven Central
+# and a GitHub Release carrying the CHANGELOG section for that version.
+#
+# Two things here are deliberate. The Central Portal takes a zipped bundle
+# rather than a deploy over the wire, so Gradle publishes into
+# build/central-bundle and .github/scripts/publish-to-central.sh uploads that
+# directory as one unit — either every module of the release lands or none does.
+# And the default publishing type is USER_MANAGED: the workflow gets the bundle
+# validated and then stops, leaving a human to press Publish, because a release
+# to Central cannot be taken back.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without the leading v (e.g. 0.1.0)"
+        required: true
+      publishing-type:
+        description: "USER_MANAGED stops at validated; AUTOMATIC publishes to Central on its own"
+        required: true
+        default: USER_MANAGED
+        type: choice
+        options: [USER_MANAGED, AUTOMATIC]
+      dry-run:
+        description: "Build and validate the bundle, upload nothing, create no release"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# Never two releases of the same repository at once, and never cancel one
+# midway: a cancelled run can leave a half-uploaded deployment in the Portal.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish larkbatis
+    runs-on: ubuntu-latest
+    # Add required reviewers to this environment to gate releases on approval.
+    environment: maven-central
+    permissions:
+      contents: write # creates the GitHub Release, and its tag on a manual run
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The changelog lives in the tagged commit, and gh needs real history
+          # to attach a release to it.
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Resolve the version to release
+        id: target
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        # A tag name is attacker-influenceable text, so it arrives through env
+        # rather than interpolated into the script body.
+        run: |
+          set -euo pipefail
+          case "$EVENT" in
+            push)              version="${TAG#v}" ;;
+            workflow_dispatch) version="$INPUT_VERSION" ;;
+            *) echo "::error::unsupported event $EVENT"; exit 1 ;;
+          esac
+
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::'$version' is not a release version (expected 0.1.0, or 0.2.0-rc1)"
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # A pre-release version (0.2.0-rc1) is marked as one on GitHub.
+          case "$version" in
+            *-*) echo "prerelease=true"  >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "Releasing $version"
+
+      - name: Check the user-facing docs do not still advertise a snapshot
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        # Every `-SNAPSHOT` in these files is a copy-pasteable coordinate, not
+        # prose about snapshots, so a blanket match is exact here. CHANGELOG.md
+        # and RELEASING.md discuss the mechanism and are deliberately excluded.
+        # This is the most visible way a release can be wrong: a README telling
+        # people to depend on a version Central has never seen.
+        run: |
+          set -euo pipefail
+          files=()
+          for f in README.md MIGRATION.md; do
+            [ -f "$f" ] && files+=("$f")
+          done
+          hits=$(grep -n -- '-SNAPSHOT' "${files[@]}" || true)
+          if [ -n "$hits" ]; then
+            echo "::error::user-facing docs still advertise a snapshot coordinate — set these to $VERSION"
+            printf '%s\n' "$hits"
+            exit 1
+          fi
+          echo "No snapshot coordinates in ${files[*]}"
+
+      - name: Build and test
+        run: ./gradlew build -Pversion=${{ steps.target.outputs.version }}
+
+      - name: Publish the signed bundle into build/central-bundle
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew publishAllPublicationsToCentralBundleRepository -Pversion=${{ steps.target.outputs.version }}
+
+      - name: Upload to the Central Portal
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+          VERSION: ${{ steps.target.outputs.version }}
+          PUBLISHING_TYPE: ${{ inputs.publishing-type || 'USER_MANAGED' }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+          # A boolean workflow input arrives as the string "false", which is
+          # non-empty — so test the value, never just its presence.
+          args=()
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          .github/scripts/publish-to-central.sh \
+            --bundle-dir build/central-bundle \
+            --name "larkbatis $VERSION" \
+            --publishing-type "$PUBLISHING_TYPE" \
+            "${args[@]}"
+
+      - name: Package larkbatis-scan for the release page
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        # The scanner is the one artifact people want without a build tool:
+        # MIGRATION.md tells them to run `larkbatis-scan /path/to/service`
+        # before they change anything.
+        run: |
+          set -euo pipefail
+          ./gradlew :larkbatis-scanner:distZip -Pversion="$VERSION"
+          # The distribution is named after `applicationName` (larkbatis-scan),
+          # not after the project — which is also the name people will run.
+          cp "larkbatis-scanner/build/distributions/larkbatis-scan-$VERSION.zip" \
+             "$RUNNER_TEMP/larkbatis-scan-$VERSION.zip"
+
+      - name: Extract the release notes
+        id: notes
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          # The CHANGELOG is the single source of the release notes: whatever
+          # sits under `## [<version>]` up to the next heading, verbatim.
+          # Fixed-string matching, so a version number needs no escaping.
+          awk -v heading="## [$VERSION]" '
+            index($0, heading) == 1           { capture = 1; next }
+            capture && index($0, "## [") == 1 { exit }   # the next version
+            capture && /^\[[^]]+\]: /         { exit }   # the link definitions
+            capture                           { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "::error::CHANGELOG.md has no '## [$VERSION]' section — write the notes before tagging"
+            exit 1
+          fi
+          echo "Release notes:"
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Create the GitHub Release
+        if: ${{ !inputs.dry-run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.target.outputs.version }}
+          PRERELEASE: ${{ steps.target.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--prerelease)
+          fi
+          # --target pins the release to this commit, which is what makes the
+          # manual (untagged) path create the tag in the right place.
+          gh release create "v$VERSION" \
+            "$RUNNER_TEMP/larkbatis-scan-$VERSION.zip" \
+            --title "larkbatis $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --target "$GITHUB_SHA" \
+            "${args[@]}"

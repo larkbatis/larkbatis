@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.app.BadQueryMapper">
+
+  <!-- name is a String: nothing to iterate -->
+  <select id="search" resultType="com.example.app.User">
+    SELECT id, name, email, created_at FROM users WHERE name IN
+    <foreach collection="name" item="n" open="(" separator="," close=")">#{n}</foreach>
+  </select>
+
+</mapper>

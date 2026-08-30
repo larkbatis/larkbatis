@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.app.BadQueryMapper">
+
+  <select id="search" resultType="com.example.app.User">
+    SELECT <include refid="com.example.app.SharedFragments.userColumns"/> FROM users
+  </select>
+
+</mapper>

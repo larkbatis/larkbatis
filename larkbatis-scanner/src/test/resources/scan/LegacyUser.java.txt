@@ -1,0 +1,62 @@
+package com.example.legacy;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+/** An ordinary POJO: it names MyBatis nowhere, and the mapper returns it. */
+public class LegacyUser {
+
+    private static final long serialVersionUID = 1L;
+
+    private long id;
+    private String name;
+    private BigDecimal balance;
+    private LocalDate joinedOn;
+
+    // in the whitelist since the type widening — negative controls, and the
+    // reason this fixture keeps them rather than a comment saying so
+    private Date regDate;
+    private Timestamp updatedAt;
+    private OffsetDateTime observedAt;
+    private BigInteger counter;
+    private char grade;
+    private Character flag;
+
+    // still unsupported: not a column, or no strategy to move it
+    private Calendar legacyCalendar;
+    private UUID token;
+    private Map<String, String> attributes;
+    private Set<String> tags;
+    private Optional<String> nickname;
+
+    // unknowable from text alone, and both supported — must stay unreported
+    private Status status;
+    private List<LegacyOrder> orders;
+
+    public long getId() {
+        return id;
+    }
+
+    public void setId(long id) {
+        this.id = id;
+    }
+
+    public void setRegDate(Date regDate) {
+        this.regDate = regDate;
+    }
+
+    /** A field and a hand-written setter for one property: still one finding. */
+    public void setToken(UUID token) {
+        this.token = token;
+    }
+}

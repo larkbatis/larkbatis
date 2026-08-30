@@ -1,7 +1,9 @@
-rootProject.name = "lightbatis"
+rootProject.name = "larkbatis"
 
-include("lightbatis-annotations")
-include("lightbatis-runtime")
-include("lightbatis-processor")
-include("lightbatis-sample")
-include("lightbatis-conformance")
+include("larkbatis-annotations")
+include("larkbatis-runtime")
+include("larkbatis-processor")
+include("larkbatis-sample")
+include("larkbatis-conformance")
+include("larkbatis-benchmarks")
+include("larkbatis-scanner")

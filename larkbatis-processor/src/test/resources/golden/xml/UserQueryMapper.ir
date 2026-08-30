@@ -1,0 +1,68 @@
+mapper com.example.app.UserQueryMapper
+  SELECT search -> MANY result:com.example.app.User reader:POSITIONAL_CANONICAL
+    local c0 = q.getName() != null
+    local c1 = q.getMinAge() != null
+    seg   always
+      text  |SELECT id, name, email, created_at FROM users|
+    seg   if c0 | c1
+      text  | WHERE|
+    seg   if c0
+      text  | name LIKE |
+      bind  name = q.getName() : STRING
+    seg   if c1
+      alt   c0 ? | AND age >= | : | age >= |
+      bind  minAge = q.getMinAge() : BOX_INT
+    seg   always
+      text  | ORDER BY id|
+  SELECT byStatus -> MANY result:com.example.app.User reader:POSITIONAL_CANONICAL
+    local c0 = q.getStatus() != null
+    local c1 = !c0
+    seg   always
+      text  |SELECT id, name, email, created_at FROM users WHERE 1 = 1|
+    seg   if c0
+      text  | AND status = |
+      bind  status = q.getStatus() : ENUM
+    seg   if c1
+      text  | AND status = 'NEW'|
+    seg   always
+      text  | ORDER BY id|
+  UPDATE rename -> UPDATE_COUNT
+    local c0 = q.getName() != null
+    local c1 = q.getEmail() != null
+    seg   always
+      text  |UPDATE users|
+    seg   if c0 | c1
+      text  | SET|
+    seg   if c0
+      text  | name = |
+      bind  name = q.getName() : STRING
+      alt   c1 ? |,| : ||
+    seg   if c1
+      text  | email = |
+      bind  email = q.getEmail() : STRING
+    seg   always
+      text  | WHERE id = |
+      bind  id = q.getId() : PRIM_LONG
+  SELECT all -> MANY result:com.example.app.User reader:POSITIONAL_CANONICAL
+    text  |SELECT id, name, email, created_at FROM users ORDER BY id|
+  SELECT findByIds -> MANY result:com.example.app.User reader:POSITIONAL_CANONICAL
+    seg   always
+      text  |SELECT id, name, email, created_at FROM users WHERE id IN|
+      text  | ORDER BY id|
+  SELECT findByIdsPadded -> MANY result:com.example.app.User reader:POSITIONAL_CANONICAL
+    seg   always
+      text  |SELECT id, name, email, created_at FROM users WHERE id IN|
+  SELECT searchInIds -> MANY result:com.example.app.User reader:POSITIONAL_CANONICAL
+    local c0 = q.getName() != null
+    local c1 = q.getIds() != null
+    seg   always
+      text  |SELECT id, name, email, created_at FROM users|
+    seg   if c0 | c1
+      text  | WHERE|
+    seg   if c0
+      text  | name LIKE |
+      bind  name = q.getName() : STRING
+    seg   if c1
+      alt   c0 ? | AND id IN| : | id IN|
+    seg   always
+      text  | ORDER BY id|

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.lbsample.LedgerMapper">
+
+    <resultMap id="entry" type="com.example.lbsample.Entry">
+        <id property="id" column="id"/>
+        <result property="amount" column="amount"
+                typeHandler="com.example.lbsample.MoneyHandler"/>
+        <result property="note" column="note"/>
+    </resultMap>
+
+    <select id="find" resultMap="entry">
+        SELECT id, amount, note FROM ledger WHERE id = #{id}
+    </select>
+
+    <!-- a select list the generator cannot parse: the name-based reader has to
+         go through the same handler -->
+    <select id="all" resultMap="entry">
+        SELECT * FROM ledger ORDER BY id
+    </select>
+
+    <insert id="insert">
+        INSERT INTO ledger (id, amount, note)
+        VALUES (#{id}, #{amount, typeHandler=com.example.lbsample.MoneyHandler}, #{note})
+    </insert>
+</mapper>

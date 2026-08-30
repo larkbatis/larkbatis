@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.app.StreamInvoiceMapper">
+  <resultMap id="m" type="com.example.app.Invoice">
+    <id property="id" column="inv_id"/>
+    <collection property="lines" ofType="com.example.app.InvoiceLine">
+      <id property="id" column="line_id"/>
+      <result property="sku" column="line_sku"/>
+    </collection>
+  </resultMap>
+  <select id="streamWithLines" resultMap="m">
+    SELECT i.id AS inv_id, l.id AS line_id, l.sku AS line_sku
+    FROM invoice i LEFT JOIN invoice_line l ON l.invoice_id = i.id
+    ORDER BY i.id
+  </select>
+</mapper>

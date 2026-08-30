@@ -1,0 +1,20 @@
+package com.example;
+
+import java.util.List;
+import java.util.Map;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.SelectProvider;
+import org.apache.ibatis.session.RowBounds;
+
+public interface LegacyJavaMapper {
+
+    @Select("SELECT id, name FROM users ORDER BY ${sort}")
+    List<User> all(String sort);
+
+    @SelectProvider(type = UserSql.class, method = "search")
+    List<User> search(Map<String, Object> filters);
+
+    List<User> paged(RowBounds bounds);
+
+    // a commented ${splice} and @SelectProvider must not be counted
+}

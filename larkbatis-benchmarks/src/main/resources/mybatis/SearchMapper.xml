@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- The two files are identical apart from the namespace: the same three
+     <if> branches have to be compiled by LarkBatis and interpreted by
+     MyBatis for the dynamic-SQL comparison to mean anything.
+
+     The pinned `id = #{pinnedId}` is what makes this benchmark about dynamic
+     SQL rather than about row reading. Every branch below is non-restrictive
+     ('%' matches every name and every non-null email, and the row's id clears
+     any minId the benchmark sets), so all three parameter settings return
+     exactly one row and the only thing that varies is how many <if> tests are
+     evaluated and how many fragments are appended. -->
+<mapper namespace="io.github.larkbatis.bench.MyBatisSearchMapper">
+
+  <select id="search" resultType="io.github.larkbatis.bench.NarrowRow">
+    SELECT id, name, email, created_at FROM narrow
+    <where>
+      id = #{pinnedId}
+      <if test="name != null">AND name LIKE #{name}</if>
+      <if test="email != null">AND email LIKE #{email}</if>
+      <if test="minId != 0">AND id &gt;= #{minId}</if>
+    </where>
+    ORDER BY id
+  </select>
+
+</mapper>

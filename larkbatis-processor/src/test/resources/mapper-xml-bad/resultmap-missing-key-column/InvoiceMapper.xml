@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.app.InvoiceMapper">
+  <resultMap id="m" type="com.example.app.Invoice">
+    <id property="id" column="not_selected"/>
+    <collection property="lines" ofType="com.example.app.InvoiceLine">
+      <id property="id" column="line_id"/>
+    </collection>
+  </resultMap>
+  <select id="findAllWithLines" resultMap="m">SELECT i.id AS inv_id, i.number AS inv_number, l.id AS line_id, l.sku AS line_sku FROM invoice i LEFT JOIN invoice_line l ON l.invoice_id = i.id ORDER BY i.id</select>
+  <select id="findWithLines" resultMap="m">SELECT i.id AS inv_id FROM invoice i WHERE i.id = #{id}</select>
+  <select id="findAllWithCustomer" resultMap="m">SELECT i.id AS inv_id FROM invoice i</select>
+  <select id="findAllFlat" resultMap="m">SELECT i.id AS inv_id FROM invoice i</select>
+</mapper>

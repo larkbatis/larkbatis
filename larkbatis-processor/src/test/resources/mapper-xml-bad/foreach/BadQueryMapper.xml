@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.app.BadQueryMapper">
+
+  <!-- ForEachSqlNode applies the separator before the first non-blank append
+       of each iteration, so an iteration that contributes nothing consumes no
+       separator. A conditional body cannot be folded to "k > 0 ? sep : """. -->
+  <select id="search" resultType="com.example.app.User">
+    SELECT id, name, email, created_at FROM users WHERE id IN
+    <foreach collection="ids" item="id" open="(" separator="," close=")">
+      <if test="id != null">#{id}</if>
+    </foreach>
+  </select>
+
+</mapper>

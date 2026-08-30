@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.app.InvoiceMapper">
+
+    <resultMap id="invoiceWithLines" type="com.example.app.Invoice">
+        <id property="id" column="inv_id"/>
+        <result property="number" column="inv_number"/>
+        <result property="issued" column="inv_issued"/>
+        <collection property="lines" ofType="com.example.app.InvoiceLine">
+            <id property="id" column="line_id"/>
+            <result property="sku" column="line_sku"/>
+            <result property="amount" column="line_amount"/>
+        </collection>
+    </resultMap>
+
+    <resultMap id="invoiceWithCustomer" type="com.example.app.Invoice">
+        <id property="id" column="inv_id"/>
+        <result property="number" column="inv_number"/>
+        <association property="customer" javaType="com.example.app.Customer">
+            <id property="id" column="cust_id"/>
+            <result property="name" column="cust_name"/>
+        </association>
+    </resultMap>
+
+    <!-- no nesting, and a select list the generator cannot parse: the columns
+         come from ResultSetMetaData once, matched on the names declared here -->
+    <resultMap id="invoiceFlat" type="com.example.app.Invoice">
+        <id property="id" column="inv_id"/>
+        <result property="number" column="inv_number"/>
+        <result property="issued" column="inv_issued"/>
+    </resultMap>
+
+    <select id="findAllWithLines" resultMap="invoiceWithLines">
+        SELECT i.id AS inv_id, i.number AS inv_number, i.issued AS inv_issued,
+               l.id AS line_id, l.sku AS line_sku, l.amount AS line_amount
+        FROM invoice i
+        LEFT JOIN invoice_line l ON l.invoice_id = i.id
+        ORDER BY i.id
+    </select>
+
+    <select id="findWithLines" resultMap="invoiceWithLines">
+        SELECT i.id AS inv_id, i.number AS inv_number, i.issued AS inv_issued,
+               l.id AS line_id, l.sku AS line_sku, l.amount AS line_amount
+        FROM invoice i
+        LEFT JOIN invoice_line l ON l.invoice_id = i.id
+        WHERE i.id = #{id}
+        ORDER BY i.id
+    </select>
+
+    <select id="findAllWithCustomer" resultMap="invoiceWithCustomer">
+        SELECT i.id AS inv_id, i.number AS inv_number,
+               c.id AS cust_id, c.name AS cust_name
+        FROM invoice i
+        LEFT JOIN customer c ON c.id = i.customer_id
+        ORDER BY i.id
+    </select>
+
+    <select id="findAllFlat" resultMap="invoiceFlat">
+        SELECT * FROM invoice_view ORDER BY inv_id
+    </select>
+</mapper>

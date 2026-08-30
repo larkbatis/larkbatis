@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.lbsample.UserSearchMapper">
+
+  <select id="search" resultType="com.example.lbsample.User">
+    SELECT id, name, email, created_at FROM users
+    <where>
+      <if test="name != null">AND name LIKE #{name}</if>
+      <if test="email != null">AND email = #{email}</if>
+    </where>
+    ORDER BY id
+  </select>
+
+  <select id="streamByName" resultType="com.example.lbsample.User">
+    SELECT id, name, email, created_at FROM users WHERE name = #{name} ORDER BY id
+  </select>
+
+  <update id="rename">
+    UPDATE users
+    <set>
+      <if test="name != null">name = #{name},</if>
+      <if test="email != null">email = #{email},</if>
+    </set>
+    WHERE id = #{id}
+  </update>
+
+</mapper>

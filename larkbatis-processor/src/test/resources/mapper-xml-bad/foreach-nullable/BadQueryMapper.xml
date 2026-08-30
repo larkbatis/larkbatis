@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.app.BadQueryMapper">
+
+  <!-- nullable="true" asks for "a null collection contributes nothing",
+       which LarkBatis does not have; nullable="false" is accepted because
+       it is what LarkBatis does anyway -->
+  <select id="search" resultType="com.example.app.User">
+    SELECT id, name, email, created_at FROM users WHERE id IN
+    <foreach collection="ids" item="id" nullable="true" open="(" separator="," close=")">
+      #{id}
+    </foreach>
+  </select>
+
+</mapper>

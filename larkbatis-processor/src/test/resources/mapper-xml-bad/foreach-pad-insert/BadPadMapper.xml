@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.app.BadPadMapper">
+
+  <!-- padding repeats the last element, which on an INSERT means duplicate rows -->
+  <insert id="insertAll">
+    INSERT INTO users (name, email) VALUES
+    <foreach collection="list" item="u" separator=",">(#{u.name}, #{u.email})</foreach>
+  </insert>
+
+</mapper>
