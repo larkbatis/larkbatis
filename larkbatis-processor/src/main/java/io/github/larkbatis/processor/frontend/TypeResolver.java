@@ -2,6 +2,7 @@ package io.github.larkbatis.processor.frontend;
 
 import io.github.larkbatis.annotations.Column;
 import io.github.larkbatis.annotations.Handler;
+import io.github.larkbatis.processor.ir.ColumnNaming;
 import io.github.larkbatis.processor.ir.PropertyModel;
 import io.github.larkbatis.processor.ir.ResultModel;
 import io.github.larkbatis.processor.ir.SqlPiece;
@@ -40,10 +41,79 @@ public final class TypeResolver {
 
     private final Elements elements;
     private final Types types;
+    private final ColumnNaming columnNaming;
+    private final TypeHandlerDefaults typeHandlerDefaults;
 
-    public TypeResolver(Elements elements, Types types) {
+    public TypeResolver(Elements elements, Types types, ColumnNaming columnNaming,
+            TypeHandlerDefaults typeHandlerDefaults) {
         this.elements = elements;
         this.types = types;
+        this.columnNaming = columnNaming;
+        this.typeHandlerDefaults = typeHandlerDefaults;
+    }
+
+    /**
+     * The default handler for a value of this type, or null. Consulted only
+     * after {@code @Handler} and a {@code typeHandler} attribute have both
+     * declined, so naming a handler at the site always wins.
+     */
+    public String defaultHandlerFor(TypeMirror valueType) {
+        if (typeHandlerDefaults.isEmpty()) {
+            return null;
+        }
+        TypeMirror erased = types.erasure(boxed(valueType));
+        return erased.getKind() == TypeKind.DECLARED
+                ? typeHandlerDefaults.handlerFor(
+                        ((TypeElement) ((DeclaredType) erased).asElement())
+                                .getQualifiedName().toString())
+                : null;
+    }
+
+    /** Whether a value of this type would pick up a default handler. */
+    public boolean hasDefaultHandlerFor(TypeMirror valueType) {
+        if (typeHandlerDefaults.isEmpty()) {
+            return false;
+        }
+        TypeMirror erased = types.erasure(boxed(valueType));
+        return erased.getKind() == TypeKind.DECLARED
+                && typeHandlerDefaults.covers(((TypeElement) ((DeclaredType) erased).asElement())
+                        .getQualifiedName().toString());
+    }
+
+    /**
+     * Everything wrong with {@code -Alarkbatis.typeHandlers}, one message
+     * each. Checked once for the whole compilation rather than where an entry
+     * is used, because an entry no property happens to have is exactly the one
+     * a typo produces, and it would otherwise never be looked at.
+     */
+    public List<String> typeHandlerDefaultProblems() {
+        List<String> problems = new ArrayList<>(typeHandlerDefaults.syntaxProblems());
+        for (Map.Entry<String, String> entry : typeHandlerDefaults.entries().entrySet()) {
+            TypeElement javaType = elements.getTypeElement(entry.getKey());
+            if (javaType == null) {
+                problems.add("larkbatis.typeHandlers names java type " + entry.getKey()
+                        + ", which is not on the compilation classpath");
+                continue;
+            }
+            TypeElement handler = elements.getTypeElement(entry.getValue());
+            if (handler == null) {
+                problems.add("larkbatis.typeHandlers names handler " + entry.getValue()
+                        + ", which is not on the compilation classpath");
+                continue;
+            }
+            try {
+                validateHandlerAt(null, handler.asType(), javaType.asType(),
+                        "larkbatis.typeHandlers entry " + entry.getKey() + ":" + entry.getValue());
+            } catch (LarkBatisProcessingException e) {
+                problems.add(e.getMessage());
+            }
+        }
+        return problems;
+    }
+
+    /** Registered types that moved nothing — a stale or mistyped entry. */
+    public List<String> unusedTypeHandlerDefaults() {
+        return typeHandlerDefaults.unusedJavaTypes();
     }
 
     /** The move strategy for a type, or null when the type is not supported. */
@@ -288,6 +358,9 @@ public final class TypeResolver {
                 String handler = handlerOf(current, method, property, propertyType);
                 handler = mergeXmlHandler(method, handler, xmlHandlers.get(property),
                         propertyType, property, resultClass);
+                if (handler == null) {
+                    handler = defaultHandlerFor(propertyType);
+                }
                 ValueKind kind = valueKindOf(propertyType);
                 if (kind == null && handler == null) {
                     if (isNestedCandidate(propertyType)) {
@@ -309,8 +382,9 @@ public final class TypeResolver {
                                     + "Timestamp, enums."
                                     + " A one-level <association>/<collection> target may also be"
                                     + " a bean or a List of one. Any other type needs a handler:"
-                                    + " @Handler on the property, or typeHandler on the"
-                                    + " <result> that maps it.");
+                                    + " @Handler on the property, typeHandler on the <result>"
+                                    + " that maps it, or an entry in"
+                                    + " -Alarkbatis.typeHandlers.");
                 }
                 properties.add(new PropertyModel(property, name, kind, enumTypeOf(propertyType),
                         columnOf(current, method, property), handler));
@@ -325,7 +399,7 @@ public final class TypeResolver {
                     "Result class " + resultClass.getQualifiedName() + " has no usable setters"
                             + lombokHint(resultClass));
         }
-        rejectColumnClash(resultClass, properties);
+        rejectColumnClash(resultClass, properties, columnNaming);
 
         String packageName = elements.getPackageOf(resultClass).getQualifiedName().toString();
         return new ResultModel(
@@ -526,27 +600,37 @@ public final class TypeResolver {
      */
     public String validateHandler(Element site, TypeMirror handlerType, TypeMirror valueType,
             String what) {
+        return validateHandlerAt(site, handlerType, valueType, "@Handler on " + what);
+    }
+
+    /**
+     * The same checks, named after whatever asked for the handler — the
+     * annotation at a site, or an entry of {@code -Alarkbatis.typeHandlers},
+     * which has no element to point at.
+     */
+    private String validateHandlerAt(Element site, TypeMirror handlerType, TypeMirror valueType,
+            String where) {
         if (handlerType.getKind() != TypeKind.DECLARED) {
             throw new LarkBatisProcessingException(site,
-                    "@Handler on " + what + " names " + handlerType + ", which is not a class");
+                    where + " names " + handlerType + ", which is not a class");
         }
         TypeElement element = (TypeElement) ((DeclaredType) handlerType).asElement();
         String fqn = element.getQualifiedName().toString();
 
         DeclaredType handlerInterface = handlerInterfaceOf(handlerType);
         if (handlerInterface == null) {
-            throw new LarkBatisProcessingException(site, "@Handler on " + what + " names " + fqn
+            throw new LarkBatisProcessingException(site, where + " names " + fqn
                     + ", which does not implement " + HANDLER_FQN);
         }
         if (handlerInterface.getTypeArguments().isEmpty()) {
-            throw new LarkBatisProcessingException(site, "@Handler on " + what + ": " + fqn
+            throw new LarkBatisProcessingException(site, where + ": " + fqn
                     + " implements " + HANDLER_FQN + " raw. Give it a type argument, so the"
                     + " build can check it against the value's type");
         }
         TypeMirror handled = types.erasure(handlerInterface.getTypeArguments().get(0));
         TypeMirror wanted = types.erasure(boxed(valueType));
         if (!types.isSameType(handled, wanted)) {
-            throw new LarkBatisProcessingException(site, "@Handler on " + what + ": " + fqn
+            throw new LarkBatisProcessingException(site, where + ": " + fqn
                     + " handles " + handled + ", but the value is " + wanted
                     + ". The handler's type argument must be the value's own type — a supertype"
                     + " would not survive the assignment the generated reader makes");
@@ -554,16 +638,16 @@ public final class TypeResolver {
 
         if (element.getKind() != ElementKind.CLASS || element.getModifiers().contains(
                 Modifier.ABSTRACT)) {
-            throw new LarkBatisProcessingException(site, "@Handler on " + what + ": " + fqn
+            throw new LarkBatisProcessingException(site, where + ": " + fqn
                     + " must be a concrete class — generated code instantiates it directly");
         }
         if (!element.getModifiers().contains(Modifier.PUBLIC)) {
-            throw new LarkBatisProcessingException(site, "@Handler on " + what + ": " + fqn
+            throw new LarkBatisProcessingException(site, where + ": " + fqn
                     + " must be public. Generated code is not always in its package");
         }
         if (element.getNestingKind().isNested()
                 && !element.getModifiers().contains(Modifier.STATIC)) {
-            throw new LarkBatisProcessingException(site, "@Handler on " + what + ": " + fqn
+            throw new LarkBatisProcessingException(site, where + ": " + fqn
                     + " is an inner class, which cannot be constructed without an enclosing"
                     + " instance. Make it static");
         }
@@ -572,7 +656,7 @@ public final class TypeResolver {
                 .anyMatch(ctor -> ctor.getParameters().isEmpty()
                         && ctor.getModifiers().contains(Modifier.PUBLIC));
         if (!constructible) {
-            throw new LarkBatisProcessingException(site, "@Handler on " + what + ": " + fqn
+            throw new LarkBatisProcessingException(site, where + ": " + fqn
                     + " needs a public no-argument constructor. One instance is held in a"
                     + " static final field and shared by every caller, so a handler that needs"
                     + " construction arguments is also a handler that is not stateless");
@@ -612,18 +696,19 @@ public final class TypeResolver {
      * of as an error inside code the user did not write.
      */
     private static void rejectColumnClash(TypeElement resultClass,
-            List<PropertyModel> properties) {
+            List<PropertyModel> properties, ColumnNaming naming) {
         Map<String, PropertyModel> byKey = new LinkedHashMap<>();
         for (PropertyModel property : properties) {
-            PropertyModel clash = byKey.putIfAbsent(property.matchKey(), property);
+            PropertyModel clash = byKey.putIfAbsent(property.matchKey(naming), property);
             if (clash != null) {
                 // "usr_email" and "usrEmail" are one column here; say why when
                 // the two spellings differ, and skip the noise when they do not
                 String same = clash.columnName().equals(property.columnName())
                         ? ""
                         : " (\"" + clash.columnName() + "\" and \"" + property.columnName()
-                                + "\" are one column: labels match case-insensitively with"
-                                + " underscores ignored)";
+                                + "\" are one column: labels match case-insensitively"
+                                + (naming.ignoresUnderscores() ? " with underscores ignored" : "")
+                                + ")";
                 throw new LarkBatisProcessingException(resultClass,
                         "Properties " + clash.name() + " and " + property.name() + " of "
                                 + resultClass.getQualifiedName() + " both read column \""

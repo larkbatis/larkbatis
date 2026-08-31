@@ -8,7 +8,9 @@ import io.github.larkbatis.processor.emit.SourceWriter;
 import io.github.larkbatis.processor.emit.SpringConfigurationEmitter;
 import io.github.larkbatis.processor.frontend.AnnotationFrontend;
 import io.github.larkbatis.processor.frontend.LarkBatisProcessingException;
+import io.github.larkbatis.processor.frontend.TypeHandlerDefaults;
 import io.github.larkbatis.processor.frontend.xml.MapperXmlParser;
+import io.github.larkbatis.processor.ir.ColumnNaming;
 import io.github.larkbatis.processor.ir.MapperModel;
 import io.github.larkbatis.processor.ir.ResultModel;
 import java.io.IOException;
@@ -41,16 +43,36 @@ import javax.tools.Diagnostic;
  * outputs have no single originating element.
  *
  * <p>The XML mapper path is driven by {@code -Alarkbatis.mapperDir}, which
- * the Gradle and Maven plugins pass automatically.
+ * the Gradle and Maven plugins pass automatically. It holds one directory or
+ * several, separated by the platform path separator or a comma; one option
+ * rather than several, because a repeated {@code -A} of the same name is the
+ * last one javac reads, not the union.
  */
 @SupportedOptions({
         LarkBatisProcessor.OPTION_MAPPER_DIR,
+        LarkBatisProcessor.OPTION_MAP_UNDERSCORE_TO_CAMEL_CASE,
+        LarkBatisProcessor.OPTION_TYPE_HANDLERS,
         LarkBatisProcessor.OPTION_REGISTRY_PACKAGE,
         LarkBatisProcessor.OPTION_SPRING_CONFIG,
         LarkBatisProcessor.OPTION_SPRING_CONFIG_PACKAGE})
 public class LarkBatisProcessor extends AbstractProcessor {
 
+    /** Directories of mapper XML: path-separator or comma separated. */
     public static final String OPTION_MAPPER_DIR = "larkbatis.mapperDir";
+    /**
+     * {@code false} makes underscores significant when a ResultSet label is
+     * matched to a property, the way MyBatis behaves with its setting of the
+     * same name off. Named after the MyBatis setting so a migrating build can
+     * carry its answer across unchanged.
+     */
+    public static final String OPTION_MAP_UNDERSCORE_TO_CAMEL_CASE =
+            "larkbatis.mapUnderscoreToCamelCase";
+    /**
+     * A default handler per Java type,
+     * {@code com.example.Money:com.example.MoneyHandler,...} — the build-time
+     * answer to a {@code mybatis-config.xml} {@code <typeHandlers>} block.
+     */
+    public static final String OPTION_TYPE_HANDLERS = "larkbatis.typeHandlers";
     public static final String OPTION_REGISTRY_PACKAGE = "larkbatis.registryPackage";
     /** {@code false} suppresses the generated Spring {@code @Configuration}. */
     public static final String OPTION_SPRING_CONFIG = "larkbatis.springConfig";
@@ -82,6 +104,7 @@ public class LarkBatisProcessor extends AbstractProcessor {
     private boolean springConfigEmitted;
 
     private AnnotationFrontend frontend;
+    private ColumnNaming columnNaming = ColumnNaming.DEFAULT;
     private SourceWriter sourceWriter;
 
     /** Mapper XML by namespace, parsed once from -Alarkbatis.mapperDir. */
@@ -91,8 +114,38 @@ public class LarkBatisProcessor extends AbstractProcessor {
     @Override
     public synchronized void init(ProcessingEnvironment env) {
         super.init(env);
-        frontend = new AnnotationFrontend(env, resultModels);
+        columnNaming = columnNaming(env);
+        frontend = new AnnotationFrontend(env, resultModels, columnNaming,
+                TypeHandlerDefaults.parse(env.getOptions().get(OPTION_TYPE_HANDLERS)));
         sourceWriter = new FilerSourceWriter(env.getFiler());
+    }
+
+    /**
+     * How ResultSet labels are matched to properties, from
+     * {@code -Alarkbatis.mapUnderscoreToCamelCase}.
+     *
+     * <p>An unrecognized value is an error rather than a silent fallback to
+     * the default. This option decides which columns reach which setters, so a
+     * mistyped {@code no} taken as {@code true} would not fail the build — it
+     * would map columns the author asked to leave alone, and the first sign of
+     * it would be data.
+     */
+    private ColumnNaming columnNaming(ProcessingEnvironment env) {
+        String option = env.getOptions().get(OPTION_MAP_UNDERSCORE_TO_CAMEL_CASE);
+        if (option == null) {
+            return ColumnNaming.DEFAULT;
+        }
+        String value = option.trim();
+        if (value.equalsIgnoreCase("true")) {
+            return ColumnNaming.UNDERSCORE_TO_CAMEL_CASE;
+        }
+        if (value.equalsIgnoreCase("false")) {
+            return ColumnNaming.EXACT;
+        }
+        env.getMessager().printMessage(Diagnostic.Kind.ERROR,
+                "-A" + OPTION_MAP_UNDERSCORE_TO_CAMEL_CASE + "=" + option
+                        + " is not a boolean — write true or false");
+        return ColumnNaming.DEFAULT;
     }
 
     @Override
@@ -114,6 +167,12 @@ public class LarkBatisProcessor extends AbstractProcessor {
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         if (xmlByNamespace == null) {
             xmlByNamespace = parseMapperXml();
+            // Once for the compilation, and before the first entry is used:
+            // resolving the classes needs the type model, which init() is too
+            // early for.
+            for (String problem : frontend.typeHandlerDefaultProblems()) {
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, problem);
+            }
         }
         // deterministic order: mappers sorted by FQN
         TreeMap<String, TypeElement> mappers = new TreeMap<>();
@@ -142,6 +201,15 @@ public class LarkBatisProcessor extends AbstractProcessor {
             }
         }
         if (roundEnv.processingOver()) {
+            for (String javaType : frontend.unusedTypeHandlerDefaults()) {
+                // A registered type nothing in the build ever has is what a
+                // typo in the java-type half looks like, and it is otherwise
+                // completely silent: no property changes, no error, no handler.
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.MANDATORY_WARNING,
+                        OPTION_TYPE_HANDLERS + " registers a handler for " + javaType
+                                + ", and no property or #{} in this compilation has that type"
+                                + " — the entry moved nothing");
+            }
             for (Map.Entry<String, MapperXmlParser.XmlMapper> entry : xmlByNamespace.entrySet()) {
                 if (!consumedNamespaces.contains(entry.getKey())) {
                     processingEnv.getMessager().printMessage(Diagnostic.Kind.MANDATORY_WARNING,
@@ -169,7 +237,7 @@ public class LarkBatisProcessor extends AbstractProcessor {
             models.add(model);
             onModel(model);
             sourceWriter.write(model.packageName() + "." + model.implSimpleName(),
-                    MapperImplEmitter.emit(model, resultModels), mapper);
+                    MapperImplEmitter.emit(model, resultModels, columnNaming), mapper);
         }
 
         // Classes the escape hatch reads but no statement returns: nothing put
@@ -191,7 +259,8 @@ public class LarkBatisProcessor extends AbstractProcessor {
         for (ResultModel result : new TreeMap<>(resultModels).values()) {
             String owner = emittedReaders.putIfAbsent(result.readerFqn(), result.fqn());
             if (owner == null) {
-                sourceWriter.write(result.readerFqn(), RowReaderEmitter.emit(result));
+                sourceWriter.write(result.readerFqn(),
+                        RowReaderEmitter.emit(result, columnNaming));
             } else if (!owner.equals(result.fqn()) && reportedReaderClashes.add(result.fqn())) {
                 // nested classes with the same simple name in one package; the
                 // second reader would silently overwrite the first

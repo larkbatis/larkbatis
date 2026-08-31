@@ -6,6 +6,7 @@ import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.CodeBlock;
 import com.palantir.javapoet.ParameterizedTypeName;
 import com.palantir.javapoet.TypeName;
+import io.github.larkbatis.processor.ir.ColumnNaming;
 import io.github.larkbatis.processor.ir.ValueKind;
 import java.util.ArrayList;
 import java.util.List;
@@ -118,6 +119,19 @@ public final class EmitSupport {
      * definite-assignment analysis cannot see that the first iteration always
      * writes them.
      */
+    /**
+     * The expression a generated column resolver switches on: the label at
+     * position {@code indexVar}, normalized as far as the chosen naming
+     * convention normalizes it. The {@code case} labels are built from the same
+     * convention, so the two cannot drift apart.
+     */
+    static CodeBlock columnLabelKey(ColumnNaming naming, String indexVar) {
+        return naming.ignoresUnderscores()
+                ? CodeBlock.of("md.getColumnLabel($L).replace($S, $S).toLowerCase($T.ROOT)",
+                        indexVar, "_", "", LOCALE)
+                : CodeBlock.of("md.getColumnLabel($L).toLowerCase($T.ROOT)", indexVar, LOCALE);
+    }
+
     static CodeBlock defaultLiteral(ValueKind kind) {
         return switch (kind) {
             case PRIM_BOOLEAN -> CodeBlock.of("false");

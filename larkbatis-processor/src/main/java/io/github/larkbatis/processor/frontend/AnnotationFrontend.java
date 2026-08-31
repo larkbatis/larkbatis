@@ -17,6 +17,7 @@ import io.github.larkbatis.processor.ir.KeyModel;
 import io.github.larkbatis.processor.ir.MapperModel;
 import io.github.larkbatis.processor.ir.NestedResult;
 import io.github.larkbatis.processor.ir.ParamModel;
+import io.github.larkbatis.processor.ir.ColumnNaming;
 import io.github.larkbatis.processor.ir.PropertyModel;
 import io.github.larkbatis.processor.ir.ReaderAccess;
 import io.github.larkbatis.processor.ir.ResultModel;
@@ -76,13 +77,17 @@ public final class AnnotationFrontend {
 
 
     private final TypeResolver typeResolver;
+    private final ColumnNaming columnNaming;
     private final Messager messager;
     private final Elements elements;
     /** Shared across mappers: one reader per result class (design red line). */
     private final Map<String, ResultModel> resultModels;
 
-    public AnnotationFrontend(ProcessingEnvironment env, Map<String, ResultModel> resultModels) {
-        this.typeResolver = new TypeResolver(env.getElementUtils(), env.getTypeUtils());
+    public AnnotationFrontend(ProcessingEnvironment env, Map<String, ResultModel> resultModels,
+            ColumnNaming columnNaming, TypeHandlerDefaults typeHandlerDefaults) {
+        this.columnNaming = columnNaming;
+        this.typeResolver = new TypeResolver(env.getElementUtils(), env.getTypeUtils(),
+                columnNaming, typeHandlerDefaults);
         this.messager = env.getMessager();
         this.elements = env.getElementUtils();
         this.resultModels = resultModels;
@@ -700,7 +705,8 @@ public final class AnnotationFrontend {
                                 + " byte[], java.time (LocalDate/LocalTime/LocalDateTime/"
                                 + "Instant/OffsetDateTime/OffsetTime/ZonedDateTime),"
                                 + " java.util.Date, java.sql.Date/Time/Timestamp, enums,"
-                                + " or any type a @Handler moves.");
+                                + " or any type a @Handler or an -Alarkbatis.typeHandlers"
+                                + " entry moves.");
             }
             return new SqlPiece.Bind(expression, value.accessor(), kind,
                     typeResolver.enumTypeOf(value.type()), handler);
@@ -727,13 +733,15 @@ public final class AnnotationFrontend {
                         value.rootParam() != null ? value.rootParam() : method,
                         declared.asType(), value.type(), where);
             }
-            if (value.handlerSite() == null) {
-                return null;
+            if (value.handlerSite() != null) {
+                TypeMirror declared = TypeResolver.handlerTypeOf(value.handlerSite());
+                if (declared != null) {
+                    return typeResolver.validateHandler(value.handlerSite(), declared,
+                            value.type(), where);
+                }
             }
-            TypeMirror declared = TypeResolver.handlerTypeOf(value.handlerSite());
-            return declared == null ? null
-                    : typeResolver.validateHandler(value.handlerSite(), declared, value.type(),
-                            where);
+            // last: the build-wide default for this type, already validated
+            return typeResolver.defaultHandlerFor(value.type());
         }
 
         /**
@@ -1098,7 +1106,11 @@ public final class AnnotationFrontend {
             VariableElement param = params.size() == 1 && !hasParamAnnotation
                     ? params.values().iterator().next()
                     : params.get(path.get(0));
-            return param != null && TypeResolver.handlerTypeOf(param) != null;
+            if (param == null) {
+                return false;
+            }
+            return TypeResolver.handlerTypeOf(param) != null
+                    || typeResolver.hasDefaultHandlerFor(param.asType());
         }
 
         private Resolved resolve(String property, String rawExpression, boolean dollar) {
@@ -1354,6 +1366,43 @@ public final class AnnotationFrontend {
         return new Return(shape, returnTypeFqn, null, null, result.fqn(), access, null);
     }
 
+    /**
+     * Under {@link ColumnNaming#EXACT}, the select-list columns that would have
+     * reached a property under the other convention and now reach none.
+     *
+     * <p>Silence is what MyBatis does here, and it is the one part of that
+     * behaviour worth improving on: the column is dropped, the property keeps
+     * its default, and nothing anywhere says so — the failure arrives as a null
+     * in production. Only reachable when the build asked for this mode, so no
+     * existing build is made noisier by it.
+     */
+    private void reportColumnsLostToExactNaming(ExecutableElement method, String statementId,
+            ResultModel result, List<String> names, List<Integer> order) {
+        if (columnNaming != ColumnNaming.EXACT) {
+            return;
+        }
+        List<String> lost = new ArrayList<>();
+        for (int i = 0; i < names.size(); i++) {
+            if (order.contains(i + 1)) {
+                continue; // this column reached a property
+            }
+            String loose = ColumnNaming.UNDERSCORE_TO_CAMEL_CASE.keyOf(names.get(i));
+            for (PropertyModel property : result.properties()) {
+                if (property.matchKey(ColumnNaming.UNDERSCORE_TO_CAMEL_CASE).equals(loose)) {
+                    lost.add(names.get(i) + " → " + property.name());
+                    break;
+                }
+            }
+        }
+        if (lost.isEmpty()) {
+            return;
+        }
+        messager.printMessage(Diagnostic.Kind.NOTE, statementId
+                + ": mapUnderscoreToCamelCase is off, so these columns reach no property and"
+                + " their properties keep their defaults — " + String.join(", ", lost)
+                + ". Alias the column in the SQL, or name it with @Column.", method);
+    }
+
     private ReaderAccess readerAccessOf(ExecutableElement method, List<SqlPiece> pieces,
             ResultModel result, String statementId) {
         SelectListParser.Result parsed = SelectListParser.parse(pieces);
@@ -1376,9 +1425,9 @@ public final class AnnotationFrontend {
         List<Integer> order = new ArrayList<>(java.util.Collections.nCopies(properties.size(), 0));
         int matched = 0;
         for (int i = 0; i < names.size(); i++) {
-            String key = PropertyModel.matchKeyOf(names.get(i));
+            String key = columnNaming.keyOf(names.get(i));
             for (int k = 0; k < properties.size(); k++) {
-                if (order.get(k) == 0 && properties.get(k).matchKey().equals(key)) {
+                if (order.get(k) == 0 && properties.get(k).matchKey(columnNaming).equals(key)) {
                     order.set(k, i + 1);
                     matched++;
                     break;
@@ -1390,6 +1439,7 @@ public final class AnnotationFrontend {
                     "No select-list column matches any property of " + result.fqn()
                             + " (columns: " + String.join(", ", names) + ")");
         }
+        reportColumnsLostToExactNaming(method, statementId, result, names, order);
         boolean canonical = names.size() == properties.size();
         if (canonical) {
             for (int k = 0; k < properties.size(); k++) {
@@ -1526,6 +1576,16 @@ public final class AnnotationFrontend {
      * did not — the same downgrade as everywhere else, only matching on the
      * the map named instead of on the property's own name.
      */
+    /** Everything wrong with {@code -Alarkbatis.typeHandlers}, one message each. */
+    public List<String> typeHandlerDefaultProblems() {
+        return typeResolver.typeHandlerDefaultProblems();
+    }
+
+    /** Registered types that moved nothing in this compilation. */
+    public List<String> unusedTypeHandlerDefaults() {
+        return typeResolver.unusedTypeHandlerDefaults();
+    }
+
     /** Property name to handler FQN, for the mappings that name one. */
     private static Map<String, String> declaredHandlers(
             List<MapperXmlParser.XmlMapping> mappings) {
@@ -1678,12 +1738,12 @@ public final class AnnotationFrontend {
      * 1-based position of a column in the select list, 0 when absent, and the
      * negated position when the name appears more than once.
      */
-    private static int positionOf(List<String> selectList, String column) {
-        String key = PropertyModel.matchKeyOf(column);
+    private int positionOf(List<String> selectList, String column) {
+        String key = columnNaming.keyOf(column);
         int found = 0;
         int hits = 0;
         for (int i = 0; i < selectList.size(); i++) {
-            if (PropertyModel.matchKeyOf(selectList.get(i)).equals(key)) {
+            if (columnNaming.keyOf(selectList.get(i)).equals(key)) {
                 hits++;
                 if (found == 0) {
                     found = i + 1;

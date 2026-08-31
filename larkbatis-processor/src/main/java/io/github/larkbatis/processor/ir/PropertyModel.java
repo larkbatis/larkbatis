@@ -21,22 +21,16 @@ public record PropertyModel(String name, String setterName, ValueKind kind, Stri
 
     /**
      * Key used to match select-list items and ResultSet labels to this
-     * property: lower-cased with underscores stripped — the build-time
-     * equivalent of MyBatis {@code mapUnderscoreToCamelCase}
-     * (MetaClass.findProperty with useCamelCaseMapping). An explicit
+     * property, under the naming convention the build chose. An explicit
      * {@code @Column} replaces the property name here and is normalized the
      * same way, so it matches a label whatever its case.
      */
-    public String matchKey() {
-        return matchKeyOf(columnName());
+    public String matchKey(ColumnNaming naming) {
+        return naming.keyOf(columnName());
     }
 
     /** What this property is called in the ResultSet: {@code @Column} or the property name. */
     public String columnName() {
         return column == null ? name : column;
-    }
-
-    public static String matchKeyOf(String columnName) {
-        return columnName.replace("_", "").toLowerCase(java.util.Locale.ROOT);
     }
 }

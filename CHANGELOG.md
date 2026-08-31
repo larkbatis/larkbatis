@@ -12,6 +12,67 @@ section here does not get released.
 
 ### Added
 
+- **`-Alarkbatis.typeHandlers` registers a handler per Java type**, which is
+  what a `mybatis-config.xml` `<typeHandlers>` block carries across as:
+
+  ```
+  -Alarkbatis.typeHandlers=com.example.Money:com.example.MoneyHandler,\
+                           com.example.Json:com.example.JsonHandler
+  ```
+
+  An entry applies to every property and every `#{}` of that type that does not
+  name a handler of its own; `@Handler` and a `typeHandler` attribute both still
+  win, because naming it at the site is the more specific answer. Migrating a
+  codebase with ten registered handlers no longer means annotating every site
+  that already worked.
+
+  Nothing about the runtime model changes. Nothing is scanned, no `@MappedTypes`
+  is read, and there is no `(javaType, jdbcType)` registry — a `jdbcType`
+  qualifier has no meaning when the generated reader knows the one column it is
+  reading. Each pair is resolved during `javac`, checked against the same rules
+  `@Handler` is held to, and compiled in as a direct call on a `static final`
+  field of the handler's own class.
+
+  An entry that moves nothing in the compilation is a build warning: that is
+  what a typo in the java-type half looks like, and it is otherwise completely
+  silent — no property changes, no error, no handler.
+
+  `larkbatis-scan` prints the ready-made option line for every `<typeHandler>`
+  that names a `javaType`.
+
+- **`-Alarkbatis.mapUnderscoreToCamelCase` can be switched off.** The
+  `snake_case` → `camelCase` column convention is still decided at build time
+  and baked into the generated reader — there is no runtime setting either way
+  — but which of the two conventions gets baked in is now the build's choice,
+  and the option is named after the MyBatis setting so a migrating build can
+  carry its answer across unchanged.
+
+  It stays **on** by default, which is not MyBatis's default. That difference
+  is the reason the option exists: a mapper written against a MyBatis config
+  that never set it keeps reading every column it read before, while columns
+  MyBatis left unmapped quietly start being read — a behaviour change no test
+  names.
+
+  With it off, underscores are significant on both sides: `user_name` no longer
+  reaches `setUserName`, and `@Column("zip_code")` still reaches `zipCode`. The
+  build then **names every column that stops reaching a property**, and the
+  property it stops reaching, which is the one thing MyBatis leaves silent
+  here:
+
+  ```text
+  UserMapper.all: mapUnderscoreToCamelCase is off, so these columns reach no
+  property and their properties keep their defaults — user_name → userName.
+  Alias the column in the SQL, or name it with @Column.
+  ```
+
+  A value that is neither `true` nor `false` is a build error rather than a
+  silent fallback: this option decides which columns reach which setters, so a
+  mistyped `no` read as `true` would not fail anything — it would map columns
+  the author asked to leave alone, and the first sign of it would be data.
+
+  `larkbatis-scan` now points at the option instead of reporting the setting as
+  unsupported.
+
 - **Custom type handlers.** A value whose type the built-in codec has no
   strategy for now moves through a
   `io.github.larkbatis.runtime.LarkBatisTypeHandler<J>` — two methods,

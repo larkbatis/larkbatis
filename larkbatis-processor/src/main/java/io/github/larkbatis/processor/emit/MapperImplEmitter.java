@@ -10,6 +10,7 @@ import com.palantir.javapoet.TypeName;
 import com.palantir.javapoet.TypeSpec;
 import io.github.larkbatis.processor.ir.DynamicModel;
 import io.github.larkbatis.processor.ir.KeyModel;
+import io.github.larkbatis.processor.ir.ColumnNaming;
 import io.github.larkbatis.processor.ir.MapperModel;
 import io.github.larkbatis.processor.ir.NestedResult;
 import io.github.larkbatis.processor.ir.ParamModel;
@@ -46,7 +47,8 @@ public final class MapperImplEmitter {
     private MapperImplEmitter() {
     }
 
-    public static String emit(MapperModel mapper, Map<String, ResultModel> resultModels) {
+    public static String emit(MapperModel mapper, Map<String, ResultModel> resultModels,
+            ColumnNaming naming) {
         ClassName mapperInterface = ClassName.get(mapper.packageName(), mapper.simpleName());
         TypeSpec.Builder type = TypeSpec.classBuilder(mapper.implSimpleName())
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
@@ -61,12 +63,12 @@ public final class MapperImplEmitter {
             addConstants(type, statement);
             if (statement.resultFqn() != null) {
                 addColumnResolver(type, statement.readerAccess(), "cols_" + statement.methodName(),
-                        resultModels.get(statement.resultFqn()));
+                        resultModels.get(statement.resultFqn()), naming);
             }
             if (statement.nested() != null) {
                 addColumnResolver(type, statement.nested().childAccess(),
                         "ncols_" + statement.methodName(),
-                        resultModels.get(statement.nested().childFqn()));
+                        resultModels.get(statement.nested().childFqn()), naming);
             }
         }
 
@@ -138,7 +140,7 @@ public final class MapperImplEmitter {
      * this one statement — so the switch lives here rather than on the reader.
      */
     private static void addColumnResolver(TypeSpec.Builder type, ReaderAccess access,
-            String name, ResultModel result) {
+            String name, ResultModel result, ColumnNaming naming) {
         if (access == null || access.mode() != ReaderAccess.Mode.NAME_BASED_MAPPED) {
             return;
         }
@@ -153,13 +155,12 @@ public final class MapperImplEmitter {
                 .addStatement("$T md = rs.getMetaData()", EmitSupport.RESULT_SET_META_DATA)
                 .addStatement("int[] c = new int[$L]", result.properties().size())
                 .beginControlFlow("for (int i = 1, n = md.getColumnCount(); i <= n; i++)")
-                .beginControlFlow("switch (md.getColumnLabel(i).replace($S, $S).toLowerCase($T.ROOT))",
-                        "_", "", EmitSupport.LOCALE);
+                .beginControlFlow("switch ($L)", EmitSupport.columnLabelKey(naming, "i"));
         for (int k = 0; k < access.columnNames().size(); k++) {
             String column = access.columnNames().get(k);
             if (column != null) {
                 resolver.addCode("case $S:\n$>c[$L] = i;\nbreak;\n$<",
-                        PropertyModel.matchKeyOf(column), k);
+                        naming.keyOf(column), k);
             }
         }
         resolver.addCode("default:\n$>break;\n$<")

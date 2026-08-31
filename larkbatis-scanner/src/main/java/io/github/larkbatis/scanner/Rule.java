@@ -92,9 +92,15 @@ public enum Rule {
                     + " use the escape hatch with SqlFragment."),
 
     PLUGIN(Severity.BLOCKER, "dropped-features", "plugin / interceptor",
-            "Interceptors hook a runtime pipeline LarkBatis does not have."
-                    + " Paging, auditing and soft-delete plugins have to become"
-                    + " explicit SQL or a decorator around the mapper."),
+            "An Interceptor wraps four objects — Executor, StatementHandler,"
+                    + " ParameterHandler, ResultSetHandler — and those are what a"
+                    + " generated method body replaces, so there is nothing left"
+                    + " to wrap. Paging becomes LIMIT/OFFSET parameters, auditing"
+                    + " moves to the service or a <sql> fragment, soft delete"
+                    + " becomes an explicit predicate, column encryption becomes a"
+                    + " type handler, and timing becomes a decorator around the"
+                    + " mapper bean. The migration guide lists one replacement per"
+                    + " plugin kind."),
 
     LAZY_LOADING(Severity.BLOCKER, "dropped-features", "lazy loading",
             "Lazy loading needs a proxy per result object. Fetch eagerly with a"
@@ -142,9 +148,12 @@ public enum Rule {
             "The attribute is read, so the mapper itself needs no edit. What"
                     + " changes is the handler class: implement"
                     + " io.github.larkbatis.runtime.LarkBatisTypeHandler instead"
-                    + " of org.apache.ibatis.type.TypeHandler. There is no"
-                    + " discovery, so a handler that was only registered in"
-                    + " <typeHandlers> has to be named at each site it applies to."),
+                    + " of org.apache.ibatis.type.TypeHandler. A handler"
+                    + " registered only in <typeHandlers> carries across as an"
+                    + " -Alarkbatis.typeHandlers entry, one javaType:handler pair"
+                    + " per registration, resolved during javac. Nothing is"
+                    + " scanned, so a handler MyBatis found through @MappedTypes"
+                    + " or a package scan has to be written out."),
 
     INLINE_TYPE_HANDLER(Severity.REVIEW, "type-handlers", "typeHandler= inside #{}",
             "Read like the attribute form, so the SQL needs no edit — same"
@@ -169,8 +178,12 @@ public enum Rule {
                     + " session.query(SqlFragment, binder, GeneratedRow.READER)."),
 
     UNDERSCORE_MAPPING_OFF(Severity.REVIEW, "row-readers", "mapUnderscoreToCamelCase is off",
-            "LarkBatis applies underscore-to-camelCase at build time, always."
-                    + " Columns that relied on it being off need @Column."),
+            "LarkBatis applies underscore-to-camelCase at build time, and defaults"
+                    + " it to on. Carry this setting across with"
+                    + " -Alarkbatis.mapUnderscoreToCamelCase=false, or leave it on and"
+                    + " give the affected columns an @Column. Leaving it on without"
+                    + " either is a behaviour change: columns MyBatis left unmapped"
+                    + " start being read."),
 
     MULTIPLE_ENVIRONMENTS(Severity.REVIEW, "spring", "more than one environment",
             "Several DataSources need @LarkBatisDataSource, which is deferred."

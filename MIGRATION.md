@@ -222,10 +222,20 @@ under either reading of the first one.
 <a id="row-readers"></a>
 ### Result reading and column names
 
-**`mapUnderscoreToCamelCase` is always on and cannot be turned off.** It is
-applied at build time. If your configuration relied on it being *off* —
-MyBatis's default — columns that used to stay unmapped will now be mapped.
-Use `@Column` where a property must bind to a specific column.
+**`mapUnderscoreToCamelCase` is applied at build time, and defaults to on.**
+MyBatis defaults it to *off*, so a configuration that never mentioned the
+setting still changes behaviour on the way across: columns that used to stay
+unmapped start being read.
+
+Two ways to keep the old behaviour. Carry the setting across —
+
+```
+-Alarkbatis.mapUnderscoreToCamelCase=false
+```
+
+— and the build reports every column that stops reaching a property, naming
+the property, so nothing goes quiet. Or leave it on and put `@Column` on the
+properties whose columns must not be guessed at.
 
 When the generator can parse the select list, it reads rows positionally
 (`rs.getLong(1)`). When it cannot — `SELECT *`, or a `${}` inside the select
@@ -366,11 +376,12 @@ a statement of its own, called before the insert.
 <a id="type-handlers"></a>
 ### Custom TypeHandlers
 
-There is no handler discovery and no `<typeHandlers>` registry — that is
-runtime type-based lookup, which is the thing being removed. A handler is named
-explicitly instead, and every place MyBatis lets you name one is read at build
-time: `typeHandler=` on `<id>`/`<result>`, `typeHandler=` inside a `#{}`, and
-`@Handler(...)` on a result property or a mapper parameter.
+There is no handler discovery: nothing scans a package and nothing reads
+`@MappedTypes`, because that is runtime type-based lookup, which is the thing
+being removed. Handlers are written out instead, and every place MyBatis lets
+you name one is read at build time: `typeHandler=` on `<id>`/`<result>`,
+`typeHandler=` inside a `#{}`, and `@Handler(...)` on a result property or a
+mapper parameter.
 
 So a mapper XML that already names its handlers needs no edit. What does change
 is the handler class itself: implement
@@ -391,8 +402,24 @@ One reading per result class: two statements naming different handlers for the
 same property is a build error, because one row reader is generated per class.
 Two readings means two result classes.
 
-A `<typeHandlers>` block in `mybatis-config.xml` has no equivalent — name the
-handler at each site that uses it.
+A `<typeHandlers>` block in `mybatis-config.xml` carries across as one
+compiler option, one `javaType:handler` pair per registration:
+
+```
+-Alarkbatis.typeHandlers=com.example.Money:com.example.MoneyHandler,\
+                         com.example.Json:com.example.JsonHandler
+```
+
+Each pair applies to every property and every `#{}` of that type that does not
+name a handler of its own, and every pair is checked during `javac` against the
+rules above. An entry that moves nothing in the build is reported, because a
+typo in the java-type half is otherwise completely silent.
+
+Two things do not carry across. A handler MyBatis found through `<package>` or
+`@MappedTypes` has to be written out as a pair — `larkbatis-scan` prints the
+line for every `<typeHandler>` that names a `javaType`. And the `jdbcType` half
+of MyBatis's `(javaType, jdbcType)` registry has no meaning here: the generated
+reader knows the one column it is reading, so there is nothing to disambiguate.
 
 Note one deliberate difference on the write side: binding a `null` through a
 statically-typed slot calls `setNull(i, <the real JDBC type>)`, where MyBatis
@@ -452,7 +479,7 @@ because MyBatis interprets at runtime.
 
 | Feature | What to do instead |
 |---|---|
-| Plugins / `Interceptor` | Explicit SQL, or a decorator around the mapper bean |
+| Plugins / `Interceptor` | One replacement per plugin kind, below |
 | `@SelectProvider` and family | Move the SQL into the mapper, or use the escape hatch |
 | Lazy loading | Fetch eagerly with a join, or split into two statements |
 | Second-level cache (`<cache>`, `@CacheNamespace`) | Cache in the service, where invalidation is visible |
@@ -462,6 +489,32 @@ because MyBatis interprets at runtime.
 | `<parameterMap>` | `#{}` with typed parameters (deprecated in MyBatis too) |
 | `objectFactory`, `objectWrapperFactory`, `reflectorFactory` | Nothing — these hook the reflection layer that no longer exists |
 | Runtime `addMapper()` | The generated registry is a closed list, by design |
+
+**Plugins are the blocker most codebases hit first**, so they are worth more
+than a table row. MyBatis applies an `Interceptor` to exactly four objects —
+`Executor`, `StatementHandler`, `ParameterHandler`, `ResultSetHandler` — each
+built through a `Configuration` factory method ending in
+`interceptorChain.pluginAll(...)` and wrapped by `Plugin.wrap` with a
+`Proxy.newProxyInstance`. Those four objects are precisely what a generated
+method body replaces: it borrows a `Connection`, prepares a constant SQL
+string, binds with typed setters chosen at build time and reads rows through a
+generated `RowReader`. There is nothing in between to wrap, and the wrapping
+call is the one call generated code never makes.
+
+| Plugin | What replaces it |
+|---|---|
+| Paging (PageHelper and friends) | `LIMIT`/`OFFSET` as ordinary `#{}` parameters, plus a count statement of its own. The page size stops being ambient thread state |
+| Auditing — `created_at`, `updated_by` | Set the fields in the service, give the column a database default, or put them in a `<sql>` fragment the inserts include |
+| Soft delete | `AND deleted = false` in the statement, or a `<sql>` fragment every select includes — it cannot be forgotten by a query that bypassed the interceptor |
+| Column encryption or masking | A `LarkBatisTypeHandler`, registered once for the type with `-Alarkbatis.typeHandlers`. This one maps across almost exactly |
+| SQL logging | The driver or the pool: `net.ttddyy:datasource-proxy`, p6spy |
+| Multi-tenancy, dynamic table or schema names | A `SqlFragment` through `${}`, the one audited gate for SQL text |
+| Timing, metrics, tracing | A decorator around the mapper bean, or Spring AOP on it |
+
+A mapper bean is an ordinary object here. In MyBatis the mapper *is* a JDK
+proxy, which is a large part of why wrapping behaviour around it means writing
+an interceptor; a generated `UserMapper$$Impl` registered as a normal bean
+takes Spring AOP, or a hand-written decorator implementing the same interface.
 
 ---
 

@@ -7,6 +7,7 @@ import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.MethodSpec;
 import com.palantir.javapoet.ParameterizedTypeName;
 import com.palantir.javapoet.TypeSpec;
+import io.github.larkbatis.processor.ir.ColumnNaming;
 import io.github.larkbatis.processor.ir.PropertyModel;
 import io.github.larkbatis.processor.ir.ResultModel;
 import java.util.Locale;
@@ -25,7 +26,7 @@ public final class RowReaderEmitter {
     private RowReaderEmitter() {
     }
 
-    public static String emit(ResultModel result) {
+    public static String emit(ResultModel result, ColumnNaming naming) {
         ClassName resultClass = ClassName.bestGuess(result.fqn());
         ClassName readerClass = ClassName.get(result.packageName(), result.readerSimpleName());
         String bean = beanVar(result);
@@ -86,8 +87,9 @@ public final class RowReaderEmitter {
         general.addStatement("return $L", bean);
         type.addMethod(general.build());
 
-        // name-based fallback: resolve indexes once per ResultSet;
-        // label matching = mapUnderscoreToCamelCase applied at build time
+        // name-based fallback: resolve indexes once per ResultSet. Which
+        // labels match which property was decided at build time, so the switch
+        // normalizes the label exactly as far as the chosen convention does.
         MethodSpec.Builder columns = MethodSpec.methodBuilder("columns")
                 .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                 .returns(int[].class)
@@ -99,11 +101,10 @@ public final class RowReaderEmitter {
                 .addStatement("$T md = rs.getMetaData()", EmitSupport.RESULT_SET_META_DATA)
                 .addStatement("int[] c = new int[$L]", result.properties().size())
                 .beginControlFlow("for (int i = 1, n = md.getColumnCount(); i <= n; i++)")
-                .beginControlFlow("switch (md.getColumnLabel(i).replace($S, $S).toLowerCase($T.ROOT))",
-                        "_", "", EmitSupport.LOCALE);
+                .beginControlFlow("switch ($L)", EmitSupport.columnLabelKey(naming, "i"));
         for (int k = 0; k < result.properties().size(); k++) {
             columns.addCode("case $S:\n$>c[$L] = i;\nbreak;\n$<",
-                    result.properties().get(k).matchKey(), k);
+                    result.properties().get(k).matchKey(naming), k);
         }
         columns.addCode("default:\n$>break;\n$<")
                 .endControlFlow()

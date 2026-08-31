@@ -70,9 +70,10 @@ public final class MyBatisConfigScan {
             return false;
         }
         if (isConfig && !underscoreMappingSeen) {
-            // MyBatis defaults it to false; LarkBatis maps underscores at
-            // build time and has no switch. Silence here means behaviour
-            // changes, which is worse than a noisy line in a report.
+            // MyBatis defaults it to false and LarkBatis defaults it to on, so
+            // a configuration that never mentions the setting still changes
+            // behaviour on the way across. Silence here is worse than a noisy
+            // line in a report.
             add(0, Rule.UNDERSCORE_MAPPING_OFF,
                     "mapUnderscoreToCamelCase is not set, so MyBatis defaults it to false");
         }
@@ -89,8 +90,21 @@ public final class MyBatisConfigScan {
             case "objectFactory", "objectWrapperFactory", "reflectorFactory" ->
                     add(line, Rule.OBJECT_FACTORY, "<" + name + " type=\""
                             + value(reader, "type") + "\">");
-            case "typeHandler" -> add(line, Rule.TYPE_HANDLER,
-                    "<typeHandler handler=\"" + value(reader, "handler") + "\">");
+            case "typeHandler" -> {
+                // With a javaType attribute the whole entry can be written out
+                // ready to paste; without one, MyBatis reads it from
+                // @MappedTypes or the handler's type argument, and guessing
+                // which would put a wrong class name in a report people copy.
+                String handler = value(reader, "handler");
+                String javaType = value(reader, "javaType");
+                // The pair alone, and first: the report clips a detail at 90
+                // characters, and the pasteable half is the whole point of
+                // printing this one.
+                add(line, Rule.TYPE_HANDLER, javaType.isEmpty()
+                        ? "handler=" + handler + " — no javaType attribute, so the type it"
+                                + " covers has to be read off the handler"
+                        : javaType + ":" + handler);
+            }
             case "environment" -> environments++;
             case "setting" -> inspectSetting(reader, line);
             case "typeAlias" -> add(line, Rule.TYPE_ALIAS_DECLARED,
