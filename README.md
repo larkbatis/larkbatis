@@ -60,9 +60,9 @@ try (LarkBatisTx tx = session.begin()) {
 
 ```kotlin
 dependencies {
-    implementation("io.github.larkbatis:larkbatis-annotations:0.1.0-SNAPSHOT")
-    implementation("io.github.larkbatis:larkbatis-runtime:0.1.0-SNAPSHOT")
-    annotationProcessor("io.github.larkbatis:larkbatis-processor:0.1.0-SNAPSHOT")
+    implementation("io.github.larkbatis:larkbatis-annotations:0.1.0")
+    implementation("io.github.larkbatis:larkbatis-runtime:0.1.0")
+    annotationProcessor("io.github.larkbatis:larkbatis-processor:0.1.0")
 }
 ```
 
@@ -73,12 +73,12 @@ dependencies {
   <dependency>
     <groupId>io.github.larkbatis</groupId>
     <artifactId>larkbatis-annotations</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
   </dependency>
   <dependency>
     <groupId>io.github.larkbatis</groupId>
     <artifactId>larkbatis-runtime</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
   </dependency>
 </dependencies>
 
@@ -92,7 +92,7 @@ dependencies {
           <path>
             <groupId>io.github.larkbatis</groupId>
             <artifactId>larkbatis-processor</artifactId>
-            <version>0.1.0-SNAPSHOT</version>
+            <version>0.1.0</version>
           </path>
         </annotationProcessorPaths>
       </configuration>
@@ -130,7 +130,7 @@ to the maven-compiler-plugin configuration.
 >
 > ```kotlin
 > annotationProcessor("org.projectlombok:lombok")
-> annotationProcessor("io.github.larkbatis:larkbatis-processor:0.1.0-SNAPSHOT")  // after
+> annotationProcessor("io.github.larkbatis:larkbatis-processor:0.1.0")  // after
 > ```
 
 > **Mapper XML and incremental builds:** the processor reads mapper XML with

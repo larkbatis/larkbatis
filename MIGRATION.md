@@ -71,20 +71,20 @@ get a confusing first error.
 ```kotlin
 // build.gradle.kts
 plugins {
-    id("io.github.larkbatis") version "0.1.0-SNAPSHOT"
+    id("io.github.larkbatis") version "0.1.0"
 }
 
 dependencies {
-    implementation("io.github.larkbatis:larkbatis-runtime:0.1.0-SNAPSHOT")
-    implementation("io.github.larkbatis:larkbatis-annotations:0.1.0-SNAPSHOT")
-    annotationProcessor("io.github.larkbatis:larkbatis-processor:0.1.0-SNAPSHOT")
+    implementation("io.github.larkbatis:larkbatis-runtime:0.1.0")
+    implementation("io.github.larkbatis:larkbatis-annotations:0.1.0")
+    annotationProcessor("io.github.larkbatis:larkbatis-processor:0.1.0")
 }
 ```
 
 Spring Boot users add the starter instead of the runtime:
 
 ```kotlin
-implementation("io.github.larkbatis:larkbatis-spring-boot-starter:0.1.0-SNAPSHOT")
+implementation("io.github.larkbatis:larkbatis-spring-boot-starter:0.1.0")
 ```
 
 Then delete the `mybatis:` block from `application.yml` and change the
@@ -102,7 +102,7 @@ first:
 
 ```kotlin
 annotationProcessor("org.projectlombok:lombok")
-annotationProcessor("io.github.larkbatis:larkbatis-processor:0.1.0-SNAPSHOT")
+annotationProcessor("io.github.larkbatis:larkbatis-processor:0.1.0")
 ```
 
 The error message says so when it sees a `lombok.*` annotation on the class,
