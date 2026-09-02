@@ -59,10 +59,14 @@ try (LarkBatisTx tx = session.begin()) {
 ### Gradle
 
 ```kotlin
+plugins {
+    java
+    id("io.github.larkbatis") version "0.1.2"
+}
+
 dependencies {
     implementation("io.github.larkbatis:larkbatis-annotations:0.1.0")
     implementation("io.github.larkbatis:larkbatis-runtime:0.1.0")
-    annotationProcessor("io.github.larkbatis:larkbatis-processor:0.1.0")
 }
 ```
 
