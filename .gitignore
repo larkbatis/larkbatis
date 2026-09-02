@@ -4,3 +4,10 @@ out/
 .idea/
 *.iml
 .DS_Store
+/larkbatis-runtime/bin/
+/larkbatis-processor/bin/
+/larkbatis-conformance/bin/
+/larkbatis-benchmarks/bin/
+/larkbatis-annotations/bin/
+/larkbatis-scanner/bin/
+/larkbatis-sample/bin/
