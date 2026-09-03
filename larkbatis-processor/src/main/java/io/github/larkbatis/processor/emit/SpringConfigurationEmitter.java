@@ -95,6 +95,7 @@ public final class SpringConfigurationEmitter {
         for (MapperModel mapper : mappers) {
             counts.merge(TypeResolver.decapitalize(mapper.simpleName()), 1, Integer::sum);
         }
+
         Map<String, String> names = new LinkedHashMap<>();
         Map<String, Integer> widenedCounts = new HashMap<>();
         for (MapperModel mapper : mappers) {
@@ -114,12 +115,14 @@ public final class SpringConfigurationEmitter {
                         TypeResolver.decapitalize(mapper.interfaceFqn().replace('.', '_')));
             }
         }
+
         return names;
     }
 
     private static String lastSegment(String packageName) {
         int dot = packageName.lastIndexOf('.');
         String segment = dot < 0 ? packageName : packageName.substring(dot + 1);
+
         return segment.isEmpty() ? "" : segment.substring(0, 1).toUpperCase(Locale.ROOT)
                 + segment.substring(1);
     }

@@ -83,11 +83,9 @@ public final class AnnotationFrontend {
     /** Shared across mappers: one reader per result class (design red line). */
     private final Map<String, ResultModel> resultModels;
 
-    public AnnotationFrontend(ProcessingEnvironment env, Map<String, ResultModel> resultModels,
-            ColumnNaming columnNaming, TypeHandlerDefaults typeHandlerDefaults) {
+    public AnnotationFrontend(ProcessingEnvironment env, Map<String, ResultModel> resultModels, ColumnNaming columnNaming, TypeHandlerDefaults typeHandlerDefaults) {
         this.columnNaming = columnNaming;
-        this.typeResolver = new TypeResolver(env.getElementUtils(), env.getTypeUtils(),
-                columnNaming, typeHandlerDefaults);
+        this.typeResolver = new TypeResolver(env.getElementUtils(), env.getTypeUtils(), columnNaming, typeHandlerDefaults);
         this.messager = env.getMessager();
         this.elements = env.getElementUtils();
         this.resultModels = resultModels;

@@ -115,8 +115,8 @@ public class LarkBatisProcessor extends AbstractProcessor {
     public synchronized void init(ProcessingEnvironment env) {
         super.init(env);
         columnNaming = columnNaming(env);
-        frontend = new AnnotationFrontend(env, resultModels, columnNaming,
-                TypeHandlerDefaults.parse(env.getOptions().get(OPTION_TYPE_HANDLERS)));
+        TypeHandlerDefaults typeHandlerDefaults = TypeHandlerDefaults.parse(env.getOptions().get(OPTION_TYPE_HANDLERS));
+        frontend = new AnnotationFrontend(env, resultModels, columnNaming, typeHandlerDefaults);
         sourceWriter = new FilerSourceWriter(env.getFiler());
     }
 
@@ -135,16 +135,20 @@ public class LarkBatisProcessor extends AbstractProcessor {
         if (option == null) {
             return ColumnNaming.DEFAULT;
         }
+
         String value = option.trim();
         if (value.equalsIgnoreCase("true")) {
             return ColumnNaming.UNDERSCORE_TO_CAMEL_CASE;
         }
+
         if (value.equalsIgnoreCase("false")) {
             return ColumnNaming.EXACT;
         }
+
         env.getMessager().printMessage(Diagnostic.Kind.ERROR,
                 "-A" + OPTION_MAP_UNDERSCORE_TO_CAMEL_CASE + "=" + option
                         + " is not a boolean — write true or false");
+
         return ColumnNaming.DEFAULT;
     }
 
@@ -152,9 +156,8 @@ public class LarkBatisProcessor extends AbstractProcessor {
     public Set<String> getSupportedAnnotationTypes() {
         Set<String> types = new HashSet<>(STATEMENT_ANNOTATIONS);
         types.add(MAPPER_ANNOTATION);
-        // claimed so that a compilation unit holding only @LarkBatisRow
-        // classes still runs this processor
         types.add(ROW_ANNOTATION);
+
         return types;
     }
 
@@ -189,8 +192,7 @@ public class LarkBatisProcessor extends AbstractProcessor {
             boolean onInterface = annotation.getQualifiedName().contentEquals(MAPPER_ANNOTATION);
             for (Element annotated : roundEnv.getElementsAnnotatedWith(annotation)) {
                 Element enclosing = onInterface ? annotated : annotated.getEnclosingElement();
-                if (enclosing instanceof TypeElement type
-                        && type.getKind() == ElementKind.INTERFACE) {
+                if (enclosing instanceof TypeElement type && type.getKind() == ElementKind.INTERFACE) {
                     mappers.put(type.getQualifiedName().toString(), type);
                 } else {
                     processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
@@ -219,6 +221,7 @@ public class LarkBatisProcessor extends AbstractProcessor {
                 }
             }
         }
+
         if (mappers.isEmpty() && rowClasses.isEmpty()) {
             return false;
         }
@@ -291,6 +294,7 @@ public class LarkBatisProcessor extends AbstractProcessor {
                     SpringConfigurationEmitter.emit(configPackage, models),
                     mappers.values().toArray(new Element[0]));
         }
+
         return false;
     }
 

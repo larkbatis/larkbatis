@@ -43,6 +43,7 @@ public final class ExprCompiler {
         Parser parser = new Parser(test, tokens);
         Node ast = parser.parseOr();
         parser.expect(TokKind.EOF);
+
         return new Translator(test, types).booleanOf(ast, Set.of()).text();
     }
 
@@ -107,6 +108,7 @@ public final class ExprCompiler {
         collectCalls(ast, calls);
         List<String> valueCalls = new ArrayList<>();
         List<String> untypedCalls = new ArrayList<>();
+
         for (String call : calls) {
             if (ALWAYS_ACCEPTED.contains(call)) {
                 continue;
@@ -117,6 +119,7 @@ public final class ExprCompiler {
                 untypedCalls.add(call);
             }
         }
+
         return new GrammarCheck(hasBarePath(ast), List.copyOf(valueCalls),
                 List.copyOf(untypedCalls));
     }
